@@ -638,7 +638,14 @@ const ExoplanetGame = () => {
                 background: 'rgba(46, 204, 113, 0.1)',
                 animation: 'fadeIn 0.5s',
                 fontSize: '14px',
-                lineHeight: '1.6'
+                lineHeight: '1.6',
+                position: 'fixed',       // overlay on top of everything
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)', // truly center
+                zIndex: 1000,            // make sure it overlays other elements
+                textAlign: 'center',     // center the text
+                maxWidth: '400px',
               }}>
                 <h3 style={{ margin: '0 0 10px 0', color: '#2ecc71' }}>
                   INCOMING TRANSMISSION
