@@ -1,0 +1,32 @@
+# Large dataset files
+kaggle/input/kepler-and-tess-exoplanet-data/*.csv
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Model files (if they get large)
+model/
+*.pkl
+*.joblib
