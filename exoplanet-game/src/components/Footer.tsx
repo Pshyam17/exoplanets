@@ -22,6 +22,7 @@ const footerStyle: React.CSSProperties = {
   color: 'white',
   padding: '10px 0',
   marginTop: 'auto',
+  
 };
 
 const containerStyle: React.CSSProperties = {
