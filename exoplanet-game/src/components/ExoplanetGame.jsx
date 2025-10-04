@@ -28,7 +28,8 @@ const ExoplanetGame = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const csvContent = await window.fs.readFile('toi_predictions.csv', { encoding: 'utf8' });
+        const response = await fetch('/toi_predictions.csv');
+        const csvContent = await response.text();
         const parsed = Papa.parse(csvContent, {
           header: true,
           dynamicTyping: true,
