@@ -1,92 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Radio, Zap } from 'lucide-react';
-
-// Simulated planet data
-const PLANETS = [
-  {
-    id: 'KOI-314',
-    name: 'Unknown-314',
-    realName: 'Kepler-314 c',
-    position: { x: -200, y: 50, z: 0 },
-    color: '#4A90E2',
-    size: 40,
-    stats: {
-      koi_period: 23.1,
-      koi_depth: 856,
-      koi_prad: 1.6,
-      koi_model_snr: 45.2,
-      koi_steff: 5640,
-      koi_duration: 3.2,
-      koi_impact: 0.42,
-      koi_teq: 582,
-      depth_snr_ratio: 18.9,
-      koi_srad: 0.95
-    },
-    classification: 'CONFIRMED',
-    probability: 0.94
-  },
-  {
-    id: 'KOI-892',
-    name: 'Unknown-892',
-    realName: 'False Positive 892',
-    position: { x: 150, y: -80, z: 50 },
-    color: '#E74C3C',
-    size: 60,
-    stats: {
-      koi_period: 0.8,
-      koi_depth: 15420,
-      koi_prad: 14.2,
-      koi_model_snr: 12.3,
-      koi_steff: 6890,
-      koi_duration: 1.1,
-      koi_impact: 0.91,
-      koi_teq: 1840,
-      depth_snr_ratio: 1254,
-      koi_srad: 1.8
-    },
-    classification: 'FALSE POSITIVE',
-    probability: 0.12
-  },
-  {
-    id: 'KOI-455',
-    name: 'Unknown-455',
-    realName: 'Kepler-455 b',
-    position: { x: 0, y: 120, z: -100 },
-    color: '#2ECC71',
-    size: 35,
-    stats: {
-      koi_period: 45.6,
-      koi_depth: 423,
-      koi_prad: 1.2,
-      koi_model_snr: 67.8,
-      koi_steff: 5120,
-      koi_duration: 4.8,
-      koi_impact: 0.23,
-      koi_teq: 412,
-      depth_snr_ratio: 6.2,
-      koi_srad: 0.88
-    },
-    classification: 'CONFIRMED',
-    probability: 0.98
-  }
-];
-
-const FEATURE_NAMES = {
-  koi_period: 'Orbital Period (days)',
-  koi_depth: 'Transit Depth (ppm)',
-  koi_prad: 'Planet Radius (Earth radii)',
-  koi_model_snr: 'Signal-to-Noise Ratio',
-  koi_steff: 'Stellar Temperature (K)',
-  koi_duration: 'Transit Duration (hrs)',
-  koi_impact: 'Impact Parameter',
-  koi_teq: 'Equilibrium Temp (K)',
-  depth_snr_ratio: 'Depth/SNR Ratio',
-  koi_srad: 'Stellar Radius (Solar)'
-};
+import { Camera, Radio, Zap, Rocket } from 'lucide-react';
+import Papa from 'papaparse';
 
 const ExoplanetGame = () => {
+  const [planets, setPlanets] = useState([]);
   const [selectedPlanet, setSelectedPlanet] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);
@@ -95,9 +14,188 @@ const ExoplanetGame = () => {
   const [explosionFrame, setExplosionFrame] = useState(0);
   const [communicationMessage, setCommunicationMessage] = useState(null);
   const [destroyedPlanets, setDestroyedPlanets] = useState([]);
+  const [warping, setWarping] = useState(false);
+  const [warpProgress, setWarpProgress] = useState(0);
+  const [toiData, setToiData] = useState([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const viewAngleRef = useRef(0);
+  const starsRef = useRef([]);
+  const warpStartTime = useRef(null);
+
+  // Load TOI data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const response = await fetch('/toi_predictions.csv');
+        const csvContent = await response.text();
+        const parsed = Papa.parse(csvContent, {
+          header: true,
+          dynamicTyping: true,
+          skipEmptyLines: true
+        });
+        
+        // Filter out rows with missing essential data
+        const validData = parsed.data.filter(row => 
+          row.toi && row.pl_rade && row.pl_orbper && row.pl_trandep && row.st_teff
+        );
+        
+        setToiData(validData);
+        setDataLoaded(true);
+        
+        // Load initial set of planets
+        loadNewPlanets(validData);
+      } catch (error) {
+        console.error('Error loading TOI data:', error);
+        // Fall back to some default planets if loading fails
+        loadDefaultPlanets();
+      }
+    };
+    
+    loadData();
+  }, []);
+
+  // Initialize background stars
+  useEffect(() => {
+    starsRef.current = Array.from({ length: 200 }, (_, i) => ({
+      x: Math.random() * 800,
+      y: Math.random() * 600,
+      z: Math.random() * 1000,
+      size: Math.random() * 2 + 0.5
+    }));
+  }, []);
+
+  const loadNewPlanets = (data = toiData) => {
+    if (!data || data.length === 0) {
+      loadDefaultPlanets();
+      return;
+    }
+
+    // Randomly select 3-4 TOIs
+    const numPlanets = 3 + Math.floor(Math.random() * 2);
+    const selectedTOIs = [];
+    const usedIndices = new Set();
+    
+    while (selectedTOIs.length < numPlanets && usedIndices.size < data.length) {
+      const idx = Math.floor(Math.random() * data.length);
+      if (!usedIndices.has(idx)) {
+        usedIndices.add(idx);
+        selectedTOIs.push(data[idx]);
+      }
+    }
+
+    // Convert TOI data to planet objects
+    const newPlanets = selectedTOIs.map((toi, index) => {
+      // Generate positions in a spread pattern
+      const angle = (index / numPlanets) * Math.PI * 2;
+      const distance = 150 + Math.random() * 100;
+      
+      // Determine classification based on disposition and predicted label
+      const isConfirmed = toi.tfopwg_disp === 'KP' || toi.tfopwg_disp === 'CP' || 
+                         (toi.tfopwg_disp === 'PC' && toi['Predicted Label'] === 1);
+      
+      // Assign colors based on classification
+      const color = isConfirmed ? '#2ECC71' : '#E74C3C';
+      
+      // Calculate size based on planet radius (Earth radii)
+      const size = Math.min(Math.max(20, toi.pl_rade * 3), 80);
+      
+      return {
+        id: `TOI-${toi.toi}`,
+        name: `Unknown TOI ${toi.toi}`,
+        realName: `TOI ${toi.toi} (${toi.tfopwg_disp || 'Unknown'})`,
+        position: {
+          x: Math.cos(angle) * distance,
+          y: Math.sin(angle) * distance,
+          z: (Math.random() - 0.5) * 100
+        },
+        color: color,
+        size: size,
+        stats: {
+          koi_period: toi.pl_orbper || 0,
+          koi_depth: toi.pl_trandep || 0,
+          koi_prad: toi.pl_rade || 0,
+          koi_model_snr: toi.pl_insol || 0,
+          koi_steff: toi.st_teff || 0,
+          koi_duration: toi.pl_trandurh || 0,
+          koi_impact: toi.st_logg || 0,
+          koi_teq: toi.pl_eqt || 0,
+          depth_snr_ratio: toi.pl_trandep && toi.pl_insol ? toi.pl_trandep / Math.max(toi.pl_insol, 0.1) : 0,
+          koi_srad: toi.st_rad || 0
+        },
+        classification: isConfirmed ? 'CONFIRMED' : 'FALSE POSITIVE',
+        probability: toi['Predicted Label'] === 1 ? 0.85 + Math.random() * 0.14 : 0.05 + Math.random() * 0.25,
+        disposition: toi.tfopwg_disp
+      };
+    });
+
+    setPlanets(newPlanets);
+    setDestroyedPlanets([]);
+    setSelectedPlanet(null);
+    setScanComplete(false);
+  };
+
+  const loadDefaultPlanets = () => {
+    // Fallback planets if data doesn't load
+    const defaultPlanets = [
+      {
+        id: 'DEFAULT-1',
+        name: 'Unknown-314',
+        realName: 'Kepler-314 c',
+        position: { x: -200, y: 50, z: 0 },
+        color: '#4A90E2',
+        size: 40,
+        stats: {
+          koi_period: 23.1,
+          koi_depth: 856,
+          koi_prad: 1.6,
+          koi_model_snr: 45.2,
+          koi_steff: 5640,
+          koi_duration: 3.2,
+          koi_impact: 0.42,
+          koi_teq: 582,
+          depth_snr_ratio: 18.9,
+          koi_srad: 0.95
+        },
+        classification: 'CONFIRMED',
+        probability: 0.94
+      }
+    ];
+    setPlanets(defaultPlanets);
+  };
+
+  const handleWarp = () => {
+    if (warping) return;
+    
+    setWarping(true);
+    setWarpProgress(0);
+    warpStartTime.current = Date.now();
+    setSelectedPlanet(null);
+    setScanComplete(false);
+    setCommunicationMessage(null);
+    
+    // After 5 seconds, load new planets
+    setTimeout(() => {
+      setWarping(false);
+      setWarpProgress(0);
+      warpStartTime.current = null;
+      loadNewPlanets();
+    }, 5000);
+  };
+
+  const FEATURE_NAMES = {
+    koi_period: 'Orbital Period (days)',
+    koi_depth: 'Transit Depth (ppm)',
+    koi_prad: 'Planet Radius (Earth radii)',
+    koi_model_snr: 'Insolation Flux',
+    koi_steff: 'Stellar Temperature (K)',
+    koi_duration: 'Transit Duration (hrs)',
+    koi_impact: 'Stellar Surface Gravity',
+    koi_teq: 'Equilibrium Temp (K)',
+    depth_snr_ratio: 'Depth/Flux Ratio',
+    koi_srad: 'Stellar Radius (Solar)'
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -111,85 +209,163 @@ const ExoplanetGame = () => {
       ctx.fillStyle = '#000814';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw stars (static)
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-      for (let i = 0; i < 100; i++) {
-        const x = (i * 37) % canvas.width;
-        const y = (i * 73) % canvas.height;
-        const size = (i % 3) * 0.5 + 0.5;
-        ctx.fillRect(x, y, size, size);
+      if (warping) {
+        // Update warp progress
+        const elapsed = Date.now() - warpStartTime.current;
+        const progress = Math.min(elapsed / 5000, 1);
+        setWarpProgress(progress);
+        
+        // Draw hyperspace effect
+        drawHyperspaceEffect(ctx, progress);
+      } else {
+        // Draw normal stars
+        drawStars(ctx);
+        
+        // Draw planets
+        planets.forEach(planet => {
+          if (destroyedPlanets.includes(planet.id)) return;
+
+          const screenX = canvas.width / 2 + planet.position.x;
+          const screenY = canvas.height / 2 + planet.position.y;
+          const scale = 1;
+
+          if (explodingPlanet === planet.id) {
+            drawExplosion(ctx, screenX, screenY, explosionFrame, planet.size);
+            return;
+          }
+
+          const gradient = ctx.createRadialGradient(
+            screenX, screenY, 0,
+            screenX, screenY, planet.size * scale
+          );
+          gradient.addColorStop(0, planet.color);
+          gradient.addColorStop(0.5, planet.color + '80');
+          gradient.addColorStop(1, 'transparent');
+
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, planet.size * scale, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (selectedPlanet?.id === planet.id) {
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, planet.size * scale + 10, 0, Math.PI * 2);
+            ctx.stroke();
+
+            if (scanning) {
+              const scanRadius = planet.size * scale + 10 + (Date.now() % 1000) / 10;
+              ctx.strokeStyle = `rgba(0, 255, 255, ${1 - (Date.now() % 1000) / 1000})`;
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(screenX, screenY, scanRadius, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
+
+          const displayName = scanComplete && selectedPlanet?.id === planet.id 
+            ? planet.realName 
+            : planet.name;
+          
+          ctx.fillStyle = 'white';
+          ctx.font = '12px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(displayName, screenX, screenY + planet.size * scale + 20);
+        });
       }
 
       // Draw spaceship cockpit overlay
       drawSpaceship(ctx);
 
-      PLANETS.forEach(planet => {
-        // Skip if destroyed
-        if (destroyedPlanets.includes(planet.id)) return;
-
-        const screenX = canvas.width / 2 + planet.position.x;
-        const screenY = canvas.height / 2 + planet.position.y;
-        const scale = 1;
-
-        // Draw explosion if this planet is exploding
-        if (explodingPlanet === planet.id) {
-          drawExplosion(ctx, screenX, screenY, explosionFrame, planet.size);
-          return; // Don't draw planet if exploding
-        }
-
-        const gradient = ctx.createRadialGradient(
-          screenX, screenY, 0,
-          screenX, screenY, planet.size * scale
-        );
-        gradient.addColorStop(0, planet.color);
-        gradient.addColorStop(0.5, planet.color + '80');
-        gradient.addColorStop(1, 'transparent');
-
-        ctx.fillStyle = gradient;
+      if (!warping) {
+        // Draw crosshair
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(screenX, screenY, planet.size * scale, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(canvas.width / 2 - 20, canvas.height / 2);
+        ctx.lineTo(canvas.width / 2 + 20, canvas.height / 2);
+        ctx.moveTo(canvas.width / 2, canvas.height / 2 - 20);
+        ctx.lineTo(canvas.width / 2, canvas.height / 2 + 20);
+        ctx.stroke();
+      }
 
-        if (selectedPlanet?.id === planet.id) {
-          ctx.strokeStyle = '#FFD700';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY, planet.size * scale + 10, 0, Math.PI * 2);
-          ctx.stroke();
-
-          if (scanning) {
-            const scanRadius = planet.size * scale + 10 + (Date.now() % 1000) / 10;
-            ctx.strokeStyle = `rgba(0, 255, 255, ${1 - (Date.now() % 1000) / 1000})`;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, scanRadius, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        }
-
-        // Only show label if scanned
-        const displayName = scanComplete && selectedPlanet?.id === planet.id 
-          ? planet.realName 
-          : planet.name;
-        
-        ctx.fillStyle = 'white';
-        ctx.font = '12px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(displayName, screenX, screenY + planet.size * scale + 20);
-      });
-
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(canvas.width / 2 - 20, canvas.height / 2);
-      ctx.lineTo(canvas.width / 2 + 20, canvas.height / 2);
-      ctx.moveTo(canvas.width / 2, canvas.height / 2 - 20);
-      ctx.lineTo(canvas.width / 2, canvas.height / 2 + 20);
-      ctx.stroke();
-
-      //setViewAngle(prev => prev + 0.5);
       viewAngleRef.current += 0.5;
       animationRef.current = requestAnimationFrame(drawScene);
+    };
+
+    const drawStars = (ctx) => {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      starsRef.current.forEach(star => {
+        const x = star.x;
+        const y = star.y;
+        ctx.fillRect(x, y, star.size, star.size);
+      });
+    };
+
+    const drawHyperspaceEffect = (ctx, progress) => {
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      
+      // Calculate speed multiplier (accelerates over time)
+      const speed = Math.pow(progress, 2) * 50 + 1;
+      
+      // Draw stretched stars
+      starsRef.current.forEach(star => {
+        // Update star position (move from center outward)
+        const dx = star.x - centerX;
+        const dy = star.y - centerY;
+        const angle = Math.atan2(dy, dx);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Calculate stretch based on progress
+        const stretch = speed * (1 + distance / 100);
+        
+        // Draw star as a line
+        const gradient = ctx.createLinearGradient(
+          centerX + Math.cos(angle) * distance,
+          centerY + Math.sin(angle) * distance,
+          centerX + Math.cos(angle) * (distance + stretch),
+          centerY + Math.sin(angle) * (distance + stretch)
+        );
+        
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        gradient.addColorStop(0.5, `rgba(200, 200, 255, ${1 - progress * 0.3})`);
+        gradient.addColorStop(1, 'rgba(100, 100, 255, 0)');
+        
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = star.size * (1 + progress);
+        ctx.beginPath();
+        ctx.moveTo(
+          centerX + Math.cos(angle) * distance,
+          centerY + Math.sin(angle) * distance
+        );
+        ctx.lineTo(
+          centerX + Math.cos(angle) * (distance + stretch),
+          centerY + Math.sin(angle) * (distance + stretch)
+        );
+        ctx.stroke();
+        
+        // Reset star position if it goes off screen
+        if (Math.abs(star.x - centerX) > canvas.width || Math.abs(star.y - centerY) > canvas.height) {
+          star.x = centerX + (Math.random() - 0.5) * 100;
+          star.y = centerY + (Math.random() - 0.5) * 100;
+        } else {
+          star.x += Math.cos(angle) * speed;
+          star.y += Math.sin(angle) * speed;
+        }
+      });
+      
+      // Add central flash effect
+      if (progress > 0.8) {
+        const flashIntensity = (progress - 0.8) * 5;
+        const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 200);
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${flashIntensity})`);
+        gradient.addColorStop(0.5, `rgba(200, 200, 255, ${flashIntensity * 0.5})`);
+        gradient.addColorStop(1, 'rgba(100, 100, 255, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
     };
 
     const drawSpaceship = (ctx) => {
@@ -231,7 +407,7 @@ const ExoplanetGame = () => {
       ctx.fill();
 
       // Tech details on corners
-      ctx.strokeStyle = '#00d9ff';
+      ctx.strokeStyle = warping ? '#ff00ff' : '#00d9ff';
       ctx.lineWidth = 2;
       // Top left bracket
       ctx.beginPath();
@@ -259,7 +435,7 @@ const ExoplanetGame = () => {
       ctx.stroke();
 
       // Heads-up display lines
-      ctx.strokeStyle = 'rgba(0, 217, 255, 0.3)';
+      ctx.strokeStyle = warping ? 'rgba(255, 0, 255, 0.3)' : 'rgba(0, 217, 255, 0.3)';
       ctx.lineWidth = 1;
       for (let i = 0; i < 5; i++) {
         const y = 100 + i * 100;
@@ -273,28 +449,30 @@ const ExoplanetGame = () => {
         ctx.stroke();
       }
 
-      // Targeting reticle elements
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.lineWidth = 1;
-      const cx = canvas.width / 2;
-      const cy = canvas.height / 2;
-      
-      // Outer targeting circle
-      ctx.beginPath();
-      ctx.arc(cx, cy, 80, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      // Inner crosshair
-      ctx.beginPath();
-      ctx.moveTo(cx - 30, cy);
-      ctx.lineTo(cx - 10, cy);
-      ctx.moveTo(cx + 10, cy);
-      ctx.lineTo(cx + 30, cy);
-      ctx.moveTo(cx, cy - 30);
-      ctx.lineTo(cx, cy - 10);
-      ctx.moveTo(cx, cy + 10);
-      ctx.lineTo(cx, cy + 30);
-      ctx.stroke();
+      // Targeting reticle elements (hide during warp)
+      if (!warping) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 1;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        
+        // Outer targeting circle
+        ctx.beginPath();
+        ctx.arc(cx, cy, 80, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Inner crosshair
+        ctx.beginPath();
+        ctx.moveTo(cx - 30, cy);
+        ctx.lineTo(cx - 10, cy);
+        ctx.moveTo(cx + 10, cy);
+        ctx.lineTo(cx + 30, cy);
+        ctx.moveTo(cx, cy - 30);
+        ctx.lineTo(cx, cy - 10);
+        ctx.moveTo(cx, cy + 10);
+        ctx.lineTo(cx, cy + 30);
+        ctx.stroke();
+      }
     };
 
     const drawExplosion = (ctx, x, y, frame, size) => {
@@ -306,13 +484,11 @@ const ExoplanetGame = () => {
       const gradient = ctx.createRadialGradient(x, y, 0, x, y, explosionSize);
       
       if (progress < 0.3) {
-        // Initial bright flash
         gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
         gradient.addColorStop(0.4, 'rgba(255, 200, 0, 0.8)');
         gradient.addColorStop(0.7, 'rgba(255, 100, 0, 0.5)');
         gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
       } else {
-        // Expanding fireball
         const opacity = 1 - progress;
         gradient.addColorStop(0, `rgba(255, 150, 0, ${opacity})`);
         gradient.addColorStop(0.5, `rgba(255, 50, 0, ${opacity * 0.6})`);
@@ -342,7 +518,7 @@ const ExoplanetGame = () => {
 
     drawScene();
     return () => cancelAnimationFrame(animationRef.current);
-  }, [selectedPlanet, scanning, viewAngle, explodingPlanet, explosionFrame, destroyedPlanets, scanComplete]);
+  }, [selectedPlanet, scanning, viewAngle, explodingPlanet, explosionFrame, destroyedPlanets, scanComplete, warping, planets]);
 
   // Handle explosion animation
   useEffect(() => {
@@ -376,12 +552,10 @@ const ExoplanetGame = () => {
 
   const handleAction = (action) => {
     if (action === 'DESTROY') {
-      // Start explosion animation
       setExplodingPlanet(selectedPlanet.id);
       setExplosionFrame(0);
       setScanComplete(false);
     } else if (action === 'COMMUNICATE') {
-      // Generate funny message based on planet classification
       const messages = selectedPlanet.classification === 'CONFIRMED' ? [
         `"Hello from ${selectedPlanet.realName}! We've been trying to reach you about your starship's extended warranty..."`,
         `The inhabitants of ${selectedPlanet.realName} respond: "Have you tried turning your civilization off and on again?"`,
@@ -412,6 +586,7 @@ const ExoplanetGame = () => {
 
   const topFeatures = selectedPlanet && scanComplete
     ? Object.entries(selectedPlanet.stats)
+        .filter(([key, value]) => value !== 0 && value !== null)
         .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
         .slice(0, 10)
     : [];
@@ -430,16 +605,18 @@ const ExoplanetGame = () => {
           textAlign: 'center',
           fontSize: '2.5rem',
           marginBottom: '10px',
-          textShadow: '0 0 10px #00ffff'
+          textShadow: `0 0 10px ${warping ? '#ff00ff' : '#00ffff'}`
         }}>
           EXOPLANET CLASSIFICATION MISSION
         </h1>
         <p style={{
           textAlign: 'center',
-          color: '#00d9ff',
+          color: warping ? '#ff00ff' : '#00d9ff',
           marginBottom: '30px'
         }}>
-          Sector Kepler-442 | Mission: Identify Exoplanet Candidates
+          {warping 
+            ? `ENGAGING HYPERDRIVE... ${(warpProgress * 100).toFixed(0)}%` 
+            : `Sector TESS-${Math.floor(Math.random() * 999) + 1} | Mission: Identify Exoplanet Candidates`}
         </p>
 
         <div style={{
@@ -448,7 +625,7 @@ const ExoplanetGame = () => {
           gap: '20px'
         }}>
           <div style={{
-            border: '2px solid #00d9ff',
+            border: `2px solid ${warping ? '#ff00ff' : '#00d9ff'}`,
             borderRadius: '8px',
             overflow: 'hidden',
             position: 'relative'
@@ -456,11 +633,13 @@ const ExoplanetGame = () => {
             <canvas
               ref={canvasRef}
               onClick={(e) => {
+                if (warping) return;
+                
                 const rect = e.target.getBoundingClientRect();
                 const x = e.clientX - rect.left - 400;
                 const y = e.clientY - rect.top - 300;
                 
-                const clicked = PLANETS.find(p => {
+                const clicked = planets.find(p => {
                   if (destroyedPlanets.includes(p.id)) return false;
                   const dx = x - p.position.x;
                   const dy = y - p.position.y;
@@ -473,7 +652,7 @@ const ExoplanetGame = () => {
                   setCommunicationMessage(null);
                 }
               }}
-              style={{ cursor: 'crosshair', display: 'block' }}
+              style={{ cursor: warping ? 'wait' : 'crosshair', display: 'block' }}
             />
             <div style={{
               position: 'absolute',
@@ -484,22 +663,50 @@ const ExoplanetGame = () => {
               borderRadius: '4px',
               fontSize: '12px'
             }}>
-              <div>TARGETS DETECTED: {PLANETS.length - destroyedPlanets.length}</div>
-              <div>STATUS: {scanning ? 'SCANNING...' : 'READY'}</div>
+              <div>TARGETS DETECTED: {planets.length - destroyedPlanets.length}</div>
+              <div>STATUS: {warping ? 'WARPING' : scanning ? 'SCANNING...' : 'READY'}</div>
+              <div>DATA SOURCE: {dataLoaded ? 'TESS TOI CATALOG' : 'LOADING...'}</div>
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <button
+              onClick={handleWarp}
+              disabled={warping}
+              style={{
+                padding: '15px',
+                fontSize: '16px',
+                background: warping 
+                  ? 'linear-gradient(45deg, #ff00ff, #00ffff)' 
+                  : 'linear-gradient(45deg, #8b00ff, #00d9ff)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: warping ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                fontFamily: 'monospace',
+                fontWeight: 'bold',
+                boxShadow: warping ? '0 0 20px #ff00ff' : '0 4px 15px rgba(139, 0, 255, 0.4)',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              <Rocket size={20} />
+              {warping ? 'WARPING...' : 'ENGAGE WARP DRIVE'}
+            </button>
+
             <div style={{
-              border: '2px solid #00d9ff',
+              border: `2px solid ${warping ? '#ff00ff' : '#00d9ff'}`,
               borderRadius: '8px',
               padding: '15px',
               background: 'rgba(0, 30, 60, 0.5)'
             }}>
-              <h3 style={{ margin: '0 0 10px 0', color: '#00d9ff' }}>
+              <h3 style={{ margin: '0 0 10px 0', color: warping ? '#ff00ff' : '#00d9ff' }}>
                 TARGET SELECTED
               </h3>
-              {selectedPlanet ? (
+              {selectedPlanet && !warping ? (
                 <>
                   <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>
                     {scanComplete ? selectedPlanet.realName : selectedPlanet.name}
@@ -509,21 +716,23 @@ const ExoplanetGame = () => {
                   </div>
                 </>
               ) : (
-                <div style={{ opacity: 0.5 }}>Click on a planet to select target</div>
+                <div style={{ opacity: 0.5 }}>
+                  {warping ? 'Systems offline during warp...' : 'Click on a planet to select target'}
+                </div>
               )}
             </div>
 
             <button
               onClick={handleScan}
-              disabled={!selectedPlanet || scanning || scanComplete}
+              disabled={!selectedPlanet || scanning || scanComplete || warping}
               style={{
                 padding: '15px',
                 fontSize: '16px',
-                background: selectedPlanet && !scanComplete ? '#00d9ff' : '#333',
-                color: selectedPlanet && !scanComplete ? '#000' : '#666',
+                background: selectedPlanet && !scanComplete && !warping ? '#00d9ff' : '#333',
+                color: selectedPlanet && !scanComplete && !warping ? '#000' : '#666',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: selectedPlanet && !scanComplete ? 'pointer' : 'not-allowed',
+                cursor: selectedPlanet && !scanComplete && !warping ? 'pointer' : 'not-allowed',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -536,7 +745,7 @@ const ExoplanetGame = () => {
               {scanning ? 'SCANNING...' : 'INITIATE SCAN'}
             </button>
 
-            {scanComplete && (
+            {scanComplete && !warping && (
               <div style={{
                 border: '2px solid #00d9ff',
                 borderRadius: '8px',
@@ -560,6 +769,11 @@ const ExoplanetGame = () => {
                     {selectedPlanet.classification}
                   </div>
                   <div>Confidence: {(selectedPlanet.probability * 100).toFixed(1)}%</div>
+                  {selectedPlanet.disposition && (
+                    <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '5px' }}>
+                      TESS Disposition: {selectedPlanet.disposition}
+                    </div>
+                  )}
                 </div>
 
                 <h4 style={{ margin: '15px 0 10px 0', fontSize: '14px' }}>
@@ -581,7 +795,7 @@ const ExoplanetGame = () => {
               </div>
             )}
 
-            {scanComplete && (
+            {scanComplete && !warping && (
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
                   onClick={() => handleAction('COMMUNICATE')}
@@ -639,12 +853,12 @@ const ExoplanetGame = () => {
                 animation: 'fadeIn 0.5s',
                 fontSize: '14px',
                 lineHeight: '1.6',
-                position: 'fixed',       // overlay on top of everything
+                position: 'fixed',
                 top: '50%',
                 left: '50%',
-                transform: 'translate(-50%, -50%)', // truly center
-                zIndex: 1000,            // make sure it overlays other elements
-                textAlign: 'center',     // center the text
+                transform: 'translate(-50%, -50%)',
+                zIndex: 1000,
+                textAlign: 'center',
                 maxWidth: '400px',
               }}>
                 <h3 style={{ margin: '0 0 10px 0', color: '#2ecc71' }}>
