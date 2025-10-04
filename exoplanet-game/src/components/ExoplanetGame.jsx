@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Radio, Zap, Rocket } from 'lucide-react';
 import Papa from 'papaparse';
