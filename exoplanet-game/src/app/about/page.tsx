@@ -17,7 +17,7 @@ export default function AboutPage() {
       <ul className="list-disc pl-6 space-y-1">
         <li><a href="https://github.com/Pshyam17" target="_blank" rel="noopener noreferrer">https://github.com/Pshyam17</a></li>
         <li><a href="https://github.com/persinammon4" target="_blank" rel="noopener noreferrer">https://github.com/persinammon4</a></li>
-        <li>i<a href="https://github.com/BrutalCaeser" target="_blank" rel="noopener noreferrer">https://github.com/BrutalCaeser</a></li>
+        <li><a href="https://github.com/BrutalCaeser" target="_blank" rel="noopener noreferrer">https://github.com/BrutalCaeser</a></li>
       </ul>
 
     </div>
